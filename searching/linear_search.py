@@ -5,11 +5,9 @@ import curses
 
 class LinearSearch(SearchStrategy):
     """implementation of the most basic search strategy"""
-    SPACING = 5
-    DELAY = 0.5
 
     def __init__(self, screen):
-        self.screen = screen
+        super().__init__(screen)
         self.visited = []
 
     def perform_search(self, nums: list, target: int):
@@ -26,7 +24,7 @@ class LinearSearch(SearchStrategy):
     def draw_array(self, nums, cur_num, row, solution_found=False, solution_idx=-1):
         """visualize each iteration of linear search algo"""
         PADDING = 5
-        DELAY = 2
+        DELAY = 1
         CYAN = curses.color_pair(1)
         RED = curses.color_pair(2)
         GREEN = curses.color_pair(3)

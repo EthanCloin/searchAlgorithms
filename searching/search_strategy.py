@@ -3,6 +3,9 @@ from abc import ABC, abstractmethod
 
 class SearchStrategy(ABC):
 
+    def __init__(self, screen):
+        self.screen = screen
+
     @abstractmethod
     def perform_search(self, nums, target):
         pass
