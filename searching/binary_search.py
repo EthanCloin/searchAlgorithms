@@ -1,20 +1,17 @@
 import collections
 import sys
-
 from .search_strategy import SearchStrategy
 import curses
-import time
 
 Bounds = collections.namedtuple('Bounds', ('lower', 'upper'))
 
 
 class BinarySearch(SearchStrategy):
+    """contains methods to visualize a binary search through an array of ints"""
 
     H_PADDING = 4  # used for column spacing
     V_PADDING = 4  # used for row spacing
     OFFSET = 15  # used for relative pos from status_window - not used at all actually
-    # LONG_DELAY = 5
-    # SHORT_DELAY = 2
     STATUS_WIN_CONFIG = (10, 50, 15, 0)
 
     def __init__(self, screen):
@@ -22,6 +19,7 @@ class BinarySearch(SearchStrategy):
         self.visited = []
         self.exec_log = []
         self.status_window = curses.newwin(*self.STATUS_WIN_CONFIG)
+        self.target = -1
 
         self.EXIT_KEY = "q"
         self.CONTINUE_KEY = "n"
@@ -32,11 +30,20 @@ class BinarySearch(SearchStrategy):
         self.BLACK = curses.color_pair(5)
 
     def perform_search(self, nums, target):
+        """logic of the binary search with some update_status calls"""
         # init bounds
         lower_bound = 0
         upper_bound = len(nums) - 1
         midpt = (upper_bound + lower_bound) // 2
-        iteration = 0
+        nums = sorted(nums)
+        iteration = 1
+
+        # store target
+        self.target = target
+
+        # intro
+        self.draw_array(nums, -1, 0)
+        self.update_status("beginning the search!", self.CYAN)
 
         while True:
             # check if bounds get out of whack aka no solution
@@ -44,62 +51,80 @@ class BinarySearch(SearchStrategy):
                 self.update_status(f"Target does not exist!", self.RED)
                 return -1
 
-            self.update_status(f"Comparing midpoint:{nums[midpt]} to target:{target}", self.YELLOW)
             # check for solution
             if nums[midpt] == target:
                 self.draw_array(nums, nums[midpt], iteration, solution_found=True, solution_idx=midpt,
                                 bounds=Bounds(lower_bound, upper_bound))
-                self.update_status(f"Target found at index {midpt}!", self.GREEN)
-                time.sleep(10)
                 return midpt
 
             if nums[midpt] < target:
 
                 # confine search to the right half
                 self.draw_array(nums, nums[midpt], iteration, bounds=Bounds(lower_bound, upper_bound))
+                self.update_status(f"{nums[midpt]} is less than {target}...updating search range!", self.CYAN)
                 lower_bound = midpt + 1
                 midpt = (upper_bound + lower_bound) // 2
-                self.update_status(f"{nums[midpt]} is less than {target}...updating search range!", self.CYAN)
-                self.update_status(f"\nUpdated Range Indices: ({lower_bound}, {upper_bound})", self.CYAN)
             elif nums[midpt] > target:
                 # confine search to the left half
                 self.draw_array(nums, nums[midpt], iteration, bounds=Bounds(lower_bound, upper_bound))
+                self.update_status(f"{nums[midpt]} is greater than {target}...updating search range!", self.CYAN)
                 upper_bound = midpt - 1
                 midpt = (upper_bound + lower_bound) // 2
-                self.update_status(f"{nums[midpt]} is greater than {target}...updating search range!", self.CYAN)
-                self.update_status(f"\nUpdated Range Indices: ({lower_bound}, {upper_bound})", self.CYAN)
             iteration += 1
 
     def draw_array(self, nums, cur_num, iteration, solution_found=False, solution_idx=-1, bounds: Bounds = None):
+        """display the list, calling update_status periodically to allow user control over timing"""
+
+        def pad_idx(index: int) -> int:
+            """helper to space numbers properly in display row"""
+            return index * self.H_PADDING
+
+        def pad_iter(index: int) -> int:
+            """helper to offset rows properly"""
+            return index + self.V_PADDING
 
         # initially draw all numbers yellow
         for idx, num in enumerate(nums):
-            # paint all as yellow first
-            str_num = str(num)
-            idx_padded = idx * self.H_PADDING
-            iter_padded = iteration + self.V_PADDING
-            self.screen.addstr(iter_padded, idx_padded, str_num, self.YELLOW)
+            self.screen.addstr(pad_iter(iteration), pad_idx(idx), str(num), self.YELLOW)
         self.screen.refresh()
 
-        # color bounds cyan, solution green, out of bounds black
+        # special behavior for first call
+        if iteration == 0:
+            return
+
+        # color bounds cyan, solution green, out of bounds black, midpoint red
+        painted = []
+
+        # paint bounds
+        self.screen.addstr(pad_iter(iteration), pad_idx(bounds.lower), str(nums[bounds.lower]), self.CYAN)
+        self.screen.addstr(pad_iter(iteration), pad_idx(bounds.upper), str(nums[bounds.upper]), self.CYAN)
+        painted.append(nums[bounds.lower])
+        painted.append(nums[bounds.upper])
+
+        self.update_status(f"\nCurrent Range Indices: ({bounds.lower}, {bounds.upper})", self.CYAN)
+
+        # paint midpoint
+        self.screen.addstr(pad_iter(iteration), pad_idx(nums.index(cur_num)), str(cur_num), self.RED)
+        painted.append(cur_num)
+        self.visited.append(cur_num)
+        self.update_status(f"Checking {cur_num} against target: {self.target}", self.YELLOW)
+
         for idx, num in enumerate(nums):
-            str_num = str(num)
-            idx_padded = idx * self.H_PADDING
-            iter_padded = iteration + self.V_PADDING
 
             # paint solution green
             if idx == solution_idx:
-                self.screen.addstr(iter_padded, idx_padded, str_num, self.GREEN)
+                self.screen.addstr(pad_iter(iteration), pad_idx(idx), str(num), self.GREEN)
+                self.update_status(f"Target found at index {solution_idx}!", self.GREEN)
                 continue
-            # paint bounds cyan
-            elif idx == bounds.lower or idx == bounds.upper:
-                self.screen.addstr(iter_padded, idx_padded, str_num, self.CYAN)
-                continue
+
+            # paint visited red
+            if num in self.visited:
+                self.screen.addstr(pad_iter(iteration), pad_idx(idx), str(num), self.RED)
             # paint out of bounds black
-            elif idx < bounds.lower:
-                self.screen.addstr(iter_padded, idx_padded, str_num, self.BLACK)
-            elif idx > bounds.upper:
-                self.screen.addstr(iter_padded, idx_padded, str_num, self.BLACK)
+            if idx < bounds.lower and num not in painted:
+                self.screen.addstr(pad_iter(iteration), pad_idx(idx), str(num), self.BLACK)
+            if idx > bounds.upper and num not in painted:
+                self.screen.addstr(pad_iter(iteration), pad_idx(idx), str(num), self.BLACK)
 
             self.screen.refresh()
 
